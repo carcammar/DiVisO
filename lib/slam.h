@@ -27,7 +27,6 @@ public:
     SLAM();
     SLAM(std::string _path_to_data, std::string _path_to_calibration);
     // void LoadImage();
-    void Initialize();
     void Run();
 
 public:
@@ -37,7 +36,18 @@ public:
 
 private:
     void Tracking();
+
+    void Initialize1Fr();
+    void Initialize2Fr();
+    void Initialize();
+
+    void ImageAlignment();
+
     void ConvertToKF(Frame* _kf);
+
+    void Triangulate(const cv::Point2f &p1, const cv::Point2f &p2, const cv::Mat &P1, const cv::Mat &P2, cv::Mat &x3D);
+
+
 
 private:
     enum state{
@@ -85,6 +95,19 @@ private:
     std::mutex m_points;
     std::mutex m_frames;
     std::mutex m_map;
+
+    // For initializer 2Fr
+    Frame* p_init_fr;
+    std::vector<cv::KeyPoint> v_kp_init;
+    std::vector<cv::KeyPoint> v_kp_curr;
+    std::vector<cv::Point2f> v_matched_p_init;
+    std::vector<cv::Point2f> v_matched_p_curr;
+    cv::Mat init_desc;
+    cv::Mat curr_desc;
+    cv::Ptr<cv::DescriptorMatcher> orb_matcher;
+    std::vector< std::vector<cv::DMatch> > init_matches;
+    std::vector<cv::DMatch> good_init_matches;
+    cv::Ptr<cv::FeatureDetector> orb_detector;
 };
 
 

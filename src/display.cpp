@@ -48,13 +48,11 @@ void Display::Run(){
         glColor3f(1.0,0.0,0.0);
         Eigen::Vector3f aux;
 
-        std::cout << "map drawer" << std::endl;
         // TODO FINISH avoid a so big mutex, too much time
         //while(!mut_map.try_lock())
         {
             std::unique_lock<std::mutex> lock(mut_map);
             //mut_map.lock();
-            std::cout << "lock map" << std::endl;
 
             for(std::vector<Eigen::Vector3f>::const_iterator itPt=v_3D_pts.begin(); itPt!=v_3D_pts.end(); itPt++)
             {
@@ -62,7 +60,6 @@ void Display::Run(){
             }
             glEnd();
             //mut_map.unlock();
-            std::cout << "unlock map" << std::endl;
 
             // glBegin(GL_LINES);
             Eigen::Matrix4f _Twc;
@@ -72,7 +69,6 @@ void Display::Run(){
             {
                 _Twc=(*itKF);
                 cvTwc = Maths::Eigmat2Cvmat(_Twc).t();
-                std::cout << "cvTwc: " << cvTwc << std::endl;
                 // TODO why transpose? Ti works...
                 glPushMatrix();
                 glMultMatrixf(cvTwc.ptr<GLfloat>(0));
@@ -106,8 +102,6 @@ void Display::Run(){
 
             _Twc=curr_Twc;
             cvTwc = Maths::Eigmat2Cvmat(_Twc).t();
-            std::cout << "_Twc: " << _Twc << std::endl;
-            std::cout << "cvTwc: " << cvTwc << std::endl;
             // TODO why transpose? Ti works...
             glPushMatrix();
             glMultMatrixf(cvTwc.ptr<GLfloat>(0));
@@ -159,9 +153,7 @@ void Display::Run(){
             size_t i=0;
             for(std::vector<cv::Point2f>::iterator itPt=v_pts.begin(); itPt!=v_pts.end(); itPt++, i++)
             {
-                // std::cout << "inv depth: " << v_pts_inv_depth[i] << std::endl;
                 float norm_depth = 255*(v_pts_inv_depth[i]-min_inv_depth)/dif_inv_depth;
-                // std::cout << "norm_depth: " << norm_depth << std::endl;
                 norm_depth=std::max(norm_depth, 0.f);
                 norm_depth=std::min(norm_depth, 255.f);
 
@@ -209,7 +201,7 @@ void Display::Update(const cv::Mat &_im, Frame* _p_curr_fr, const std::list<Poin
             if (!*itPt)
                 continue;
             v_3D_pts[i]=(*itPt)->GetWorldPos();
-            std::cout << "Point position: " << v_3D_pts[i] << ": " << std::endl;
+            // std::cout << "Point position: " << v_3D_pts[i] << ": " << std::endl;
 
         }
 

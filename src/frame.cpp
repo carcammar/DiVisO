@@ -7,7 +7,9 @@ Frame::Frame(unsigned int _id, const std::string _path_to_image, const unsigned 
     // TODO: Parallelize this method
     std::unique_lock<std::mutex> lock(m_im);
 
-    cv::imread(_path_to_image, CV_LOAD_IMAGE_GRAYSCALE).convertTo(im, CV_32F);
+    im_8u = cv::imread(_path_to_image, CV_LOAD_IMAGE_GRAYSCALE);
+    im_8u.convertTo(im, CV_32F);
+
     if (im.empty())
         std::cout << "Error: EMPTY IMAGE" << std::endl;
 
@@ -96,6 +98,30 @@ Frame::Frame(unsigned int _id, const std::string _path_to_image, const unsigned 
     SetPose(Eigen::MatrixXf::Identity(4,4));
     // l_points.resize(2000); // TODO reserve space for list
 }
+
+Frame::Frame(Frame* _p_fr): id(_p_fr->id), b_KF(_p_fr->b_KF), p_cam(_p_fr->p_cam), scales(_p_fr->scales), scale_fact(_p_fr->scale_fact),
+    dist_neigh(_p_fr->dist_neigh), l_points(_p_fr->l_points), T_wc(_p_fr->T_wc), T_cw(_p_fr->T_cw)
+{
+    im = _p_fr->im.clone();
+    im_8u = _p_fr->im_8u.clone();
+    im_und = _p_fr->im_und.clone();
+    feasible_pts = _p_fr->feasible_pts.clone();
+    mod_grad = _p_fr->mod_grad.clone();
+    v_extr_points = _p_fr->v_extr_points;
+
+    v_pyramids.resize(_p_fr->v_pyramids.size());
+    v_gradX.resize(_p_fr->v_gradX.size());
+    v_gradY.resize(_p_fr->v_gradY.size());
+
+    for (size_t i = 0; i<_p_fr->v_pyramids.size(); i++)
+    {
+        v_pyramids[i] = _p_fr->v_pyramids[i].clone();
+        v_gradX[i] = _p_fr->v_gradX[i].clone();
+        v_gradY[i]= _p_fr->v_gradY[i].clone();
+    }
+}
+
+
 
 Frame::~Frame(){
 

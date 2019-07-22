@@ -18,8 +18,8 @@ int main(int argc, char *argv[])
     // std::string path_to_data = "/home/carlos/Datasets/dataset_1/cam0";
     // std::string path_to_calibration = "/home/carlos/Datasets/dataset_1/EuRoC.yaml";
 
-    std::string path_to_data = "/home/ccampos/DiVisO/dataset/cam0/";
-    std::string path_to_calibration = "/home/ccampos/DiVisO/dataset/EuRoC.yaml";
+    std::string path_to_data = "/home/ccampos/DiVisO_dataset/cam0/";
+    std::string path_to_calibration = "/home/ccampos/DiVisO_dataset/EuRoC.yaml";
 
     std::cout << "DiVisO SLAM" << std::endl;
 

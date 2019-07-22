@@ -8,6 +8,7 @@
 #include <mutex>
 #include <list>
 
+#include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
@@ -24,6 +25,7 @@ class Frame
 public:
     Frame();
     Frame(unsigned int _id, const std::string _path_to_image, const unsigned int _scales, const double _scale_fact, const int _dist_negih, Camera* _p_cam);
+    Frame(Frame* _p_fr);
     ~Frame();
 
     void Align(const Frame* _prev_fr);
@@ -45,6 +47,7 @@ public:
     const unsigned int id;
 
     cv::Mat im;
+    cv::Mat im_8u;
     cv::Mat im_und;
     cv::Mat feasible_pts;
     cv::Mat mod_grad; // Just for finest level
