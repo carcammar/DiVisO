@@ -32,14 +32,14 @@ endif()
 
 find_package(OpenCV 3.0 QUIET)
 find_package(Eigen3 3.1.0 REQUIRED)
-find_package(Ceres QUIET)
+# find_package(Ceres QUIET)
 find_package(Pangolin REQUIRED)
 
 include_directories(
 ${PROJECT_SOURCE_DIR}
 ${PROJECT_SOURCE_DIR}/lib
 ${EIGEN3_INCLUDE_DIR}
-${CERES_INCLUDE_DIRS}
+# ${CERES_INCLUDE_DIRS}
 ${Pangolin_INCLUDE_DIRS}
 )
 
@@ -71,7 +71,7 @@ add_executable(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}
 ${OpenCV_LIBS}
 ${EIGEN3_LIBS}
-${CERES_LIBRARIES}
+# ${CERES_LIBRARIES}
 ${Pangolin_LIBRARIES}
 )
 

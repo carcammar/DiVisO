@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <iostream>
 
+#include "maths.h"
 
 class Camera
 {
@@ -26,7 +27,8 @@ public:
     Eigen::Vector2f Distort(Eigen::Vector2f _u_corr);
     Eigen::Vector2f Undistort(Eigen::Vector2f _u_dist);
 
-    cv::Mat GetK();
+    Eigen::Matrix3f GetK();
+    cv::Mat GetKcv();
     cv::Mat GetDist();
 
 private:

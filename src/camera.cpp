@@ -10,6 +10,7 @@ Camera::Camera(const float _f_x, const float _f_y, const float _c_x, const float
     cv_K.at<float>(1,2)=c_y;
     cv_K.at<float>(2,2)=1.f;
     cv_dist = cv::Mat(4, 1, CV_32F, 0.0);
+    K = Maths::Cvmat2Eigmat(cv_K);
 }
 
 Camera::Camera(float const *_f, float const *_c, float *_dist):
@@ -23,6 +24,7 @@ Camera::Camera(float const *_f, float const *_c, float *_dist):
     cv_K.at<float>(1,2)=c_y;
     cv_K.at<float>(2,2)=1.f;
     cv_dist = cv::Mat(4, 1, CV_32F, _dist);
+    K = Maths::Cvmat2Eigmat(cv_K);
 }
 
 Eigen::Vector2f Camera::Distort(Eigen::Vector2f _u_corr)
@@ -94,9 +96,14 @@ Eigen::Vector4f Camera::UnprojectDistInc(Eigen::Vector2f _uv, float _inv_depth) 
     return X;
 }
 
-cv::Mat Camera::GetK()
+cv::Mat Camera::GetKcv()
 {
     return cv_K.clone();
+}
+
+Eigen::Matrix3f Camera::GetK()
+{
+    return K;
 }
 
 cv::Mat Camera::GetDist()

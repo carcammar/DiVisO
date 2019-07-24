@@ -14,16 +14,21 @@ Frame::Frame(unsigned int _id, const std::string _path_to_image, const unsigned 
         std::cout << "Error: EMPTY IMAGE" << std::endl;
 
     // TODO: ideally remove undistortion
-    std::cout << "Cam matrix: " << p_cam->GetK() << std::endl;
+    std::cout << "Cam matrix: " << p_cam->GetKcv() << std::endl;
     std::cout << "Dist parameters: " << p_cam->GetDist() << std::endl;
     std::cout << "im size: " << im.size() << std::endl;
-    cv::undistort(im.clone(), im, p_cam->GetK(), p_cam->GetDist());
+    cv::undistort(im.clone(), im, p_cam->GetKcv(), p_cam->GetDist());
 
     v_pyramids.resize(scales+1);
+    v_scale_fact.resize(scales+1);
+    v_inv_scale_fact.resize(scales+1);
     v_gradX.resize(scales+1);
     v_gradY.resize(scales+1);
 
+
     v_pyramids[0]=im.clone(); // TODO: clone?
+    v_scale_fact[0] << 0.f, 0.f;
+    v_inv_scale_fact[0] << 0.f, 0.f;
 
     // Compute pyramids and gradients
     for(unsigned int i=0; i<=scales; i++){
@@ -91,6 +96,8 @@ Frame::Frame(unsigned int _id, const std::string _path_to_image, const unsigned 
         if (i!=scales)
         {
             cv::resize(im_blur, v_pyramids[i+1], cv::Size(), scale_fact, scale_fact, CV_INTER_LINEAR);
+            v_scale_fact[i+1] << static_cast<float>(v_pyramids[i+1].rows)/static_cast<float>(v_pyramids[i].rows), static_cast<float>(v_pyramids[i+1].cols)/static_cast<float>(v_pyramids[i].cols);
+            v_inv_scale_fact[i+1] << 1.f/v_scale_fact[i+1](0), 1.f/v_scale_fact[i+1](1);
         }
 
     }
@@ -110,11 +117,15 @@ Frame::Frame(Frame* _p_fr): id(_p_fr->id), b_KF(_p_fr->b_KF), p_cam(_p_fr->p_cam
     v_extr_points = _p_fr->v_extr_points;
 
     v_pyramids.resize(_p_fr->v_pyramids.size());
+    v_scale_fact.resize(_p_fr->v_pyramids.size());
+    v_inv_scale_fact.resize(_p_fr->v_pyramids.size());
     v_gradX.resize(_p_fr->v_gradX.size());
     v_gradY.resize(_p_fr->v_gradY.size());
 
     for (size_t i = 0; i<_p_fr->v_pyramids.size(); i++)
     {
+        v_scale_fact[i] = _p_fr->v_scale_fact[i];
+        v_inv_scale_fact[i] = _p_fr->v_inv_scale_fact[i];
         v_pyramids[i] = _p_fr->v_pyramids[i].clone();
         v_gradX[i] = _p_fr->v_gradX[i].clone();
         v_gradY[i]= _p_fr->v_gradY[i].clone();
@@ -159,6 +170,96 @@ void Frame::GetGradLevel(const unsigned int _lev, bool _b_X, cv::Mat &_im)
         _im=v_gradY[_lev].clone();
 }
 
+float Frame::GetIntPoint(const Eigen::Vector2f &_uv, const unsigned int _lev)
+{
+    // TODO: maybe faster with cv::Mat operations
+    int x_0 = static_cast<int>(floor(_uv(0)));
+    int y_0 = static_cast<int>(floor(_uv(1)));
+    int x_1 = x_0+1;
+    int y_1 = y_0+1;
+
+    Eigen::Vector2f aux1, aux2;
+    aux1 << static_cast<float>(x_1)-_uv(0) , _uv(0)-static_cast<float>(x_0);
+    aux2 << static_cast<float>(y_1)-_uv(1) , _uv(1)-static_cast<float>(y_0);
+
+    float *p0 = v_pyramids[_lev].ptr<float>(y_0);
+    float *p1 = v_pyramids[_lev].ptr<float>(y_1);
+    float i_0_0 = p0[x_0];
+    float i_0_1 = p1[x_0];
+    float i_1_0 = p0[x_1];
+    float i_1_1 = p1[x_1];
+
+    return aux1(0)*(i_0_0*aux2(0)+i_0_1*aux2(1))+aux1(1)*(i_1_0*aux2(0)+i_1_1*aux2(1));
+}
+
+void Frame::GetGradPoint(const Eigen::Vector2f &_uv, const unsigned int _lev, Eigen::Vector2f &_grad)
+{
+    // TODO: maybe faster with cv::Mat operations
+    int x_0 = static_cast<int>(floor(_uv(0)));
+    int y_0 = static_cast<int>(floor(_uv(1)));
+    int x_1 = x_0+1;
+    int y_1 = y_0+1;
+    // weights
+    Eigen::Vector2f aux1, aux2;
+    aux1 << static_cast<float>(x_1)-_uv(0) , _uv(0)-static_cast<float>(x_0);
+    aux2 << static_cast<float>(y_1)-_uv(1) , _uv(1)-static_cast<float>(y_0);
+
+    float *p0 = v_gradX[_lev].ptr<float>(y_0);
+    float *p1 = v_gradX[_lev].ptr<float>(y_1);
+    float g_0_0 = p0[x_0];
+    float g_0_1 = p1[x_0];
+    float g_1_0 = p0[x_1];
+    float g_1_1 = p1[x_1];
+    // std::cout << "g_0_0=" << g_0_0 << std::endl;
+    _grad(0) = aux1(0)*(g_0_0*aux2(0)+g_0_1*aux2(1))+aux1(1)*(g_1_0*aux2(0)+g_1_1*aux2(1));
+
+    p0 = v_gradY[_lev].ptr<float>(y_0);
+    p1 = v_gradY[_lev].ptr<float>(y_1);
+    g_0_0 = p0[x_0];
+    g_0_1 = p1[x_0];
+    g_1_0 = p0[x_1];
+    g_1_1 = p1[x_1];
+    // std::cout << "g_0_0=" << g_0_0 << std::endl;
+    _grad(1) = aux1(0)*(g_0_0*aux2(0)+g_0_1*aux2(1))+aux1(1)*(g_1_0*aux2(0)+g_1_1*aux2(1));
+}
+
+void Frame::GetScaleFact(const unsigned _lev, Eigen::Vector2f &_scale_fact)
+{
+    if(_lev>scales)
+    {
+        std::cout << "Scale out of limits!! (GetScaleFact)" << std::endl;
+        return;
+    }
+    _scale_fact = v_scale_fact[_lev];
+}
+
+void Frame::GetScaleFact(std::vector<Eigen::Vector2f> &_v_scale_fact)
+{
+    _v_scale_fact = v_scale_fact;
+}
+
+void Frame::ChangeScalePoint(const unsigned int _scale_0, const unsigned int _scale_1, Eigen::Vector2f &_pt)
+{
+    if (_scale_0==_scale_1)
+        return;
+    else if(_scale_0>_scale_1)
+    {
+        for(int lev = _scale_0; lev>_scale_1; lev--)
+        {
+            _pt(0) *= v_inv_scale_fact[lev](0);
+            _pt(1) *= v_inv_scale_fact[lev](1);
+        }
+    }
+    else {
+        for(int lev = _scale_0+1; lev<=_scale_1; lev++)
+        {
+            _pt(0) *= v_scale_fact[lev](0);
+            _pt(1) *= v_scale_fact[lev](1);
+        }
+    }
+}
+
+
 void Frame::ExtractPoints(const unsigned int _n_points, const unsigned int _grid_rows, const unsigned int _grid_cols, const float _min_grad2)
 {
     // TODO: Apply grid and maximun nmber of extracted points
@@ -193,18 +294,17 @@ void Frame::ExtractPoints(const unsigned int _n_points, const unsigned int _grid
     int count=0;
     for(int i = dist_neigh__2; i < n_rows_cont-dist_neigh__2; ++i)
     {
-        std::cout << "i: " << i << std::endl;
+        // std::cout << "i: " << i << std::endl;
         p = mod_grad.ptr<float>(i);
         for (int j = dist_neigh__2; j < n_cols_cont-dist_neigh__2; ++j)
         {
             if(p[j]>=_min_grad2)
             {
-                std::cout << "    j: " << j << std::endl;
+                // std::cout << "    j: " << j << std::endl;
 
-                std::pair<std::vector<int>, std::vector<float> > _pair;
-                _pair.first.resize(2);
-                _pair.first[0]=j;
-                _pair.first[1]=i;
+                std::pair<Eigen::Vector2f, std::vector<float> > _pair;
+                _pair.first(0)=static_cast<float>(j);
+                _pair.first(1)=static_cast<float>(i);
                 _pair.second.resize(dist_neigh_2);
 
                 float* p_grad;
@@ -233,7 +333,7 @@ void Frame::ExtractPoints(const unsigned int _n_points, const unsigned int _grid
                         p_grad[j2]=0.f; // To avoid be choosen in next steps
                 }
 
-                std::cout << _pair.first[0] << ", " << _pair.first[1] << ": " << _pair.second.front() << std::endl;
+                // std::cout << _pair.first[0] << ", " << _pair.first[1] << ": " << _pair.second.front() << std::endl;
                 v_extr_points.push_back(_pair);
             }
         }
