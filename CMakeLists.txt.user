@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
+<<<<<<< 4fb9ed10db765bdfc61209ff98a0b3f98801aabe
 <!-- Written by QtCreator 4.9.2, 2019-07-24T17:31:48. -->
+=======
+<!-- Written by QtCreator 4.0.2, 2019-07-22T15:04:22. -->
+>>>>>>> cmake upload
 <qtcreator>
  <data>
   <variable>EnvironmentId</variable>
