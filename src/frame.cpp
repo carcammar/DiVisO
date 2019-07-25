@@ -182,6 +182,7 @@ float Frame::GetIntPoint(const Eigen::Vector2f &_uv, const unsigned int _lev)
     aux1 << static_cast<float>(x_1)-_uv(0) , _uv(0)-static_cast<float>(x_0);
     aux2 << static_cast<float>(y_1)-_uv(1) , _uv(1)-static_cast<float>(y_0);
 
+    std::cout << "v_pyramids[_lev].size() = " << v_pyramids[_lev].size() << "       _uv = " << _uv.transpose() <<  std::endl;
     float *p0 = v_pyramids[_lev].ptr<float>(y_0);
     float *p1 = v_pyramids[_lev].ptr<float>(y_1);
     float i_0_0 = p0[x_0];
@@ -238,6 +239,29 @@ void Frame::GetScaleFact(std::vector<Eigen::Vector2f> &_v_scale_fact)
     _v_scale_fact = v_scale_fact;
 }
 
+
+void Frame::GetScaleSize(const unsigned _lev, Eigen::Vector2i &_scale_size)
+{
+    if(_lev>scales)
+    {
+        std::cout << "Scale out of limits!! (GetScaleSize)" << std::endl;
+        return;
+    }
+    _scale_size(0) = v_pyramids[_lev].rows;
+    _scale_size(1) = v_pyramids[_lev].cols;
+}
+
+void Frame::GetScaleSize(std::vector<Eigen::Vector2i> &_v_scale_size)
+{
+    _v_scale_size.resize(scales+1);
+    for(int i=0; i<=scales; i++)
+    {
+        _v_scale_size[i](0) = v_pyramids[i].rows;
+        _v_scale_size[i](1) = v_pyramids[i].cols;
+    }
+}
+
+
 void Frame::ChangeScalePoint(const unsigned int _scale_0, const unsigned int _scale_1, Eigen::Vector2f &_pt)
 {
     if (_scale_0==_scale_1)
@@ -278,7 +302,7 @@ void Frame::ExtractPoints(const unsigned int _n_points, const unsigned int _grid
     int n_rows_cont = mod_grad.rows;
     int n_cols_cont = mod_grad.cols;
 
-    // Todo, taking advante of continu
+    // Todo, taking advante of continue
     /*if (mod_grad.isContinuous())
     {
         n_cols_cont *= n_rows_cont;

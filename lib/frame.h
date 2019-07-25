@@ -37,6 +37,8 @@ public:
 
     void GetScaleFact(const unsigned _lev, Eigen::Vector2f &_scale_fact);
     void GetScaleFact(std::vector<Eigen::Vector2f> &_v_scale_fact);
+    void GetScaleSize(const unsigned _lev, Eigen::Vector2i &_scale_size);
+    void GetScaleSize(std::vector<Eigen::Vector2i> &_v_scale_size);
 
     void ChangeScalePoint(const unsigned int _scale_0, const unsigned int _scale_1, Eigen::Vector2f &_pt);
 

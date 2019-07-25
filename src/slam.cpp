@@ -330,8 +330,8 @@ void SLAM::Initialize2Fr()
         }
 
 
-        P2.rowRange(0,3).colRange(0,3) = R_test.clone();
-        P2.rowRange(0,3).colRange(3,4) = t_test.clone();
+        /*P2.rowRange(0,3).colRange(0,3) = R_test.clone();
+        P2.rowRange(0,3).colRange(3,4) = t_test.clone();*/
 
         R_test.copyTo(P2.rowRange(0,3).colRange(0,3));
         t_test.copyTo(P2.rowRange(0,3).col(3));
@@ -432,6 +432,19 @@ void SLAM::Triangulate(const cv::Point2f &p1, const cv::Point2f &p2, const cv::M
     x3D = x3D.rowRange(0,3)/x3D.at<float>(3);
 }
 
+void SLAM::Triangulate(const Eigen::Vector2f &p1, const Eigen::Vector2f &p2, const Eigen::Matrix<float,3,4> &P1, const Eigen::Matrix<float,3,4> &P2, Eigen::Vector3f &x3D)
+{
+    Eigen::Matrix<float,4,4> A;
+
+    A.row(0) = p1(0)*P1.row(2)-P1.row(0);
+    A.row(1) = p1(1)*P1.row(2)-P1.row(1);
+    A.row(2) = p2(0)*P2.row(2)-P2.row(0);
+    A.row(3) = p2(1)*P2.row(2)-P2.row(1);
+
+    Eigen::BDCSVD<Eigen::MatrixXf> svd(A, Eigen::ComputeFullU|Eigen::ComputeFullV);
+    x3D = svd.matrixV().col(3).block<3,1>(0,0)/svd.matrixV()(3);
+}
+
 // TODO inline this function
 void SLAM::ComputeEpipolarLine(const Eigen::Vector2f &_uv, const Eigen::Matrix<float,4,4> &_T10, const Eigen::Matrix<float,3,3> &_K, const float _depth_0, Eigen::Vector2f &_dir_epi, Eigen::Vector2f &_o_epi)
 {
@@ -455,16 +468,18 @@ void SLAM::ComputeEpipolarLine(const Eigen::Vector2f &_uv, const Eigen::Matrix<f
 
 void SLAM::EpipolarTriangulate(Frame* _p_fr_0, Frame* _p_fr_1, const Eigen::Matrix<float,4,4> &_T10)
 {
+    const float epi_step = 0.1f;
     Eigen::Matrix3f K_cam = _p_fr_0->p_cam->GetK();
     std::cout << "_T10 = " << _T10 << std::endl;
     std::cout << "K_cam = " << K_cam << std::endl;
 
-    float depth_0 = 100.f;
+    float depth_0 = 30.f;
     Eigen::Vector2f dir_epi;
-    Eigen::Vector2f o_epi;
     Eigen::Vector2f grad;
     std::vector<Eigen::Vector2f> v_scale_fact;
+    std::vector<Eigen::Vector2i> v_scale_size;
     _p_fr_0->GetScaleFact(v_scale_fact);
+    _p_fr_0->GetScaleSize(v_scale_size);
 
     // 0. Extract points of high gradient in first frame
     _p_fr_0->ExtractPoints(n_points, grid_rows, grid_cols, min_grad_2);
@@ -473,12 +488,25 @@ void SLAM::EpipolarTriangulate(Frame* _p_fr_0, Frame* _p_fr_1, const Eigen::Matr
     const unsigned int scales = _p_fr_0->scales;
     float I_0, I_1, g_1;
     Eigen::Vector2f uv_0, uv_1;
+    bool b_success;
 
-    for (auto it = _p_fr_0->v_extr_points.begin(); it != _p_fr_0->v_extr_points.end(); it++)
+    Eigen::Matrix<float,3,3> K = _p_fr_0->p_cam->GetK();
+    Eigen::Matrix<float,3,4> P1 = Eigen::MatrixXf::Zero(3,4);
+    P1.block<3,3>(0,0) = K;
+    Eigen::Matrix<float,3,4> P2 = _T10.block<3,4>(0,0);
+    P2 = K*P2;
+    Eigen::Vector3f x3D;
+
+    for (auto it = _p_fr_0->v_extr_points.rbegin(); it != _p_fr_0->v_extr_points.rend(); it++)
     {
+        b_success=false;
         // 1.1 Compute epipolar line
         uv_0 = it->first;
         ComputeEpipolarLine(uv_0, _T10, K_cam, depth_0, dir_epi, uv_1);
+
+        std::cout << "dir_epi = " << dir_epi.transpose() << std::endl;
+        std::cout << "uv_0 = " << uv_0.transpose() << std::endl << "    uv_1 = " << uv_1.transpose() << std::endl;
+
         _p_fr_0->ChangeScalePoint(0,scales, uv_0);
         _p_fr_1->ChangeScalePoint(0,scales, uv_1);
 
@@ -498,17 +526,70 @@ void SLAM::EpipolarTriangulate(Frame* _p_fr_0, Frame* _p_fr_1, const Eigen::Matr
             if(lev==scales)
                 std::cout << "   scale: " << lev << "    I_0-I_1: " << I_0-I_1 << "      point: " << uv_1.transpose() << "     grad: " << g_1 << std::endl;
 
-            uv_1 += dir_epi*(I_0-I_1)/g_1; // update
+            uv_1 += epi_step*dir_epi*(I_0-I_1)/g_1; // update
+
+            // Check not out of image
+            if (!(uv_1(0)>=0.f && uv_1(0) < v_scale_size[lev](1)-1 && uv_1(1)>=0.f && uv_1(1) < v_scale_size[lev](0)-1))
+            {
+                break;
+            }
+
+
             std::cout << "   scale: " << lev << "    I_0-I_1: " << I_0-I_1 << "      point: " << uv_1.transpose() << "     grad: " << g_1 << std::endl;
+
+
+
 
             if (lev>0)
             {
                 _p_fr_0->ChangeScalePoint(lev,lev-1, uv_0);
                 _p_fr_1->ChangeScalePoint(lev,lev-1, uv_1);
             }
+            else
+            {
+                b_success=true;
 
+                // Show images
+                cv::Mat Im0, Im1;
+                _p_fr_0->GetPyrLevel(lev, Im0);
+                _p_fr_1->GetPyrLevel(lev, Im1);
+                Im0.convertTo(Im0,CV_8UC3);
+                Im1.convertTo(Im1,CV_8UC3);
+                /*
+                cv::circle(Im0, Maths::EigV2f2cvPt2(uv_0),5.f, cv::Scalar( 0, 0, 255 ), CV_FILLED, cv::LINE_8);
+                cv::circle(Im1, Maths::EigV2f2cvPt2(uv_1),5.f, cv::Scalar( 0, 0, 255 ), CV_FILLED, cv::LINE_8);
+                cv::line(Im1, Maths::EigV2f2cvPt2(uv_1-100*dir_epi), Maths::EigV2f2cvPt2(uv_1+100*dir_epi), cv::Scalar( 0, 0, 255 ), 1, cv::LINE_8);
+                */
+                cv::Point2f p_0_cv, p_1_cv, epi_0, epi_1;
+                p_0_cv.x = uv_0(1);
+                p_0_cv.y = uv_0(0);
+                p_1_cv.x = uv_1(1);
+                p_1_cv.y = uv_1(0);
+                epi_0.x = uv_1(1)-1000*dir_epi(1);
+                epi_0.y = uv_1(0)-1000*dir_epi(0);
+                epi_1.x = uv_1(1)+1000*dir_epi(1);
+                epi_1.y = uv_1(0)+1000*dir_epi(0);
+
+                cv::circle(Im0, cv::Point2f(100,200),2, cv::Scalar( 0, 0, 255 ), CV_FILLED, cv::LINE_8);
+                cv::circle(Im0, p_0_cv,2, cv::Scalar( 0, 0, 255 ), CV_FILLED, cv::LINE_8);
+                cv::circle(Im1, p_1_cv,2, cv::Scalar( 0, 0, 255 ), CV_FILLED, cv::LINE_8);
+                cv::line(Im1, epi_0, epi_1, cv::Scalar( 0, 0, 255 ), 1, cv::LINE_8);
+                cv::Mat dst;
+                cv::hconcat(Im0, Im1, dst);
+                p_displayer->Update(dst, p_curr_fr, l_all_points, l_all_KFs);
+                usleep(static_cast<__useconds_t>(3e6f));
+
+            }
+
+            std::cout << "   scale: " << lev << "      point: " << uv_1.transpose() << "     size: " << v_scale_size[lev].transpose() << std::endl;
         }
 
+        // 1.3 Traingulate if search was successful
+        if(b_success)
+        {
+            Triangulate(uv_0, uv_1, P1, P2, x3D); // TODO, triangulate all points together, since SVD is equal for all of them
+            std::cout << "----------------------3D point = " << x3D.transpose() << std::endl;
+        }
 
     }
 }

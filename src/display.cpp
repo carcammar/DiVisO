@@ -178,7 +178,9 @@ void Display::Update(const cv::Mat &_im, Frame* _p_curr_fr, const std::list<Poin
 
         std::unique_lock<std::mutex> lock(mut_im);
         _im.copyTo(im);
-        cv::cvtColor(im, im, CV_GRAY2RGB);
+        if (im.type()!=16) // C
+            cv::cvtColor(im, im, CV_GRAY2RGB);
+
         // Update projected points
         _p_curr_fr->GetPointProjections(v_pts, v_pts_inv_depth);
         // mut_im.unlock();

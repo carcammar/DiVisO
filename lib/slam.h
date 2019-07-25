@@ -46,6 +46,8 @@ private:
     void ConvertToKF(Frame* _kf);
 
     void Triangulate(const cv::Point2f &p1, const cv::Point2f &p2, const cv::Mat &P1, const cv::Mat &P2, cv::Mat &x3D);
+    void Triangulate(const Eigen::Vector2f &p1, const Eigen::Vector2f &p2, const Eigen::Matrix<float,3,4> &P1, const Eigen::Matrix<float,3,4> &P2, Eigen::Vector3f &x3D);
+
     void ComputeEpipolarLine(const Eigen::Vector2f &_uv, const Eigen::Matrix<float,4,4> &_T10, const Eigen::Matrix<float,3,3> &_K, const float _depth_0, Eigen::Vector2f &_dir_epi, Eigen::Vector2f &_o_epi);
     void EpipolarTriangulate(Frame* _p_fr_0, Frame* _p_fr_1, const Eigen::Matrix<float,4,4> &_T10);
 
