@@ -1,6 +1,7 @@
 #include "maths.h"
 
 const float eps = 1e-4;
+const cv::Mat cvW = (cv::Mat_<float>(3,3) << 0,-1,0,1,0,0,0,0,1);
 
 Eigen::Matrix<float,3,3> Maths::Skew(Eigen::Vector3f vec)
 {
@@ -85,7 +86,7 @@ Eigen::Matrix<float,4,4> Maths::InvSE3(Eigen::Matrix<float,4,4> T)
     return mat;
 }
 
-Eigen::MatrixXf Maths::Cvmat2Eigmat(cv::Mat cvM)
+Eigen::MatrixXf Maths::cvMat2Eigmat(cv::Mat cvM)
 {
     Eigen::MatrixXf eigM;
     eigM = Eigen::MatrixXf::Zero(cvM.rows, cvM.cols);
@@ -107,7 +108,7 @@ Eigen::MatrixXf Maths::Cvmat2Eigmat(cv::Mat cvM)
                     eigM(i,j) = static_cast<float>(cvM.at<double>(i,j));
             break;
         default:
-            std::cout << "ERROR IN Cvmat2Eigmat" << std::endl;
+            std::cout << "ERROR IN cvMat2Eigmat" << std::endl;
     }
     return eigM;
 }
@@ -123,11 +124,39 @@ cv::Mat Maths::Eigmat2Cvmat(Eigen::MatrixXf eigM)
     return cvM.clone();
 }
 
-Eigen::Vector2f Maths::cvPoint2EigVec(cv::Point2f cvP)
+Eigen::Vector2f Maths::cvPoint2EigVec2(cv::Point2f cvP)
 {
     Eigen::Vector2f eigP;
     eigP(0) = cvP.x;
     eigP(1) = cvP.y;
+    return eigP;
+}
+
+Eigen::Vector3f Maths::cvPoint2EigVec3(cv::Point3f cvP)
+{
+    Eigen::Vector3f eigP;
+    eigP(0) = cvP.x;
+    eigP(1) = cvP.y;
+    eigP(2) = cvP.z;
+    return eigP;
+}
+
+Eigen::Vector2f Maths::cvMat2EigVec2(cv::Mat cvMat)
+{
+    // TODO Check matrix size?
+    Eigen::Vector2f eigP;
+    eigP(0) = cvMat.at<float>(0,0);
+    eigP(1) = cvMat.at<float>(1,0);
+    return eigP;
+}
+
+Eigen::Vector3f Maths::cvMat2EigVec3(cv::Mat cvMat)
+{
+    // TODO Check matrix size?
+    Eigen::Vector3f eigP;
+    eigP(0) = cvMat.at<float>(0,0);
+    eigP(1) = cvMat.at<float>(1,0);
+    eigP(2) = cvMat.at<float>(2,0);
     return eigP;
 }
 
@@ -137,4 +166,31 @@ cv::Point2f Maths::EigV2f2cvPt2(Eigen::Vector2f _v_eig)
     pt.x=_v_eig[0];
     pt.y=_v_eig[1];
     return pt;
+}
+
+void Maths::MotFromEss(const cv::Mat &_E,cv::Mat &_R1, cv::Mat &_R2, cv::Mat &_t)
+{
+    cv::Mat w, u, vt;
+    cv::SVD cv_svd;
+    cv_svd.compute(_E, w, u, vt);
+
+    _t = u.col(2).clone();
+    _R1 = u*cvW*vt;
+    _R2 = u*cvW.t()*vt;
+
+    // Check they are rotation matrices
+    if(cv::determinant(_R1)<0)
+        _R1=-_R1;
+
+    if(cv::determinant(_R2)<0)
+        _R2=-_R2;
+
+    std::cout << "_E = " << _E << std::endl;
+    std::cout << "w = " << w << std::endl;
+    std::cout << "u = " << u << std::endl;
+    std::cout << "vt = " << vt << std::endl;
+
+    std::cout << "_t = " << _t << std::endl;
+    std::cout << "_R1 = " << _R1 << std::endl;
+    std::cout << "_R2 = " << _R2 << std::endl;
 }

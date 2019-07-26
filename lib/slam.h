@@ -39,6 +39,7 @@ private:
 
     void Initialize1Fr();
     void Initialize2Fr();
+
     void Initialize();
 
     void ImageAlignment();

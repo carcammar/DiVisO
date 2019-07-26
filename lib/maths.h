@@ -21,10 +21,16 @@ public:
     static Eigen::Matrix<float,4,4> InvSE3(Eigen::Matrix<float,4,4> T);
 
     // Conversions
-    static Eigen::MatrixXf Cvmat2Eigmat(cv::Mat cvM);
+    static Eigen::MatrixXf cvMat2Eigmat(cv::Mat cvM);
     static cv::Mat Eigmat2Cvmat(Eigen::MatrixXf eigM);
-    static Eigen::Vector2f cvPoint2EigVec(cv::Point2f cvP);
+    static Eigen::Vector2f cvPoint2EigVec2(cv::Point2f cvP);
+    static Eigen::Vector3f cvPoint2EigVec3(cv::Point3f cvP);
+    static Eigen::Vector2f cvMat2EigVec2(cv::Mat cvMat);
+    static Eigen::Vector3f cvMat2EigVec3(cv::Mat cvMat);
     static cv::Point2f EigV2f2cvPt2(Eigen::Vector2f _v_eig);
+
+    // Geometry
+    static void MotFromEss(const cv::Mat &_E, cv::Mat &_R1, cv::Mat &_R2, cv::Mat &_t);
 
 };
 

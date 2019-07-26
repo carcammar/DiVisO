@@ -89,7 +89,7 @@ SLAM::SLAM(std::string _path_to_data, std::string _path_to_calibration):
     min_grad_2 = min_grad*min_grad;
 
     std::cout << "Camera matrix: " << f[0] <<", " << f[1] <<", " << c[0] <<", " << c[1] << std::endl;
-    std::cout << "Distortion coefficients: " << dist[0] <<", " << dist[1] <<", " << dist[0] <<", " << dist[1] << std::endl;
+    std::cout << "Distortion coefficients: " << dist[0] <<", " << dist[1] <<", " << dist[2] <<", " << dist[3] << std::endl;
     std::cout << "Grid: " << grid_rows << "x" << grid_cols << std::endl;
     std::cout << "Minimun gradient: " << min_grad << std::endl;
     std::cout << "Points: " << n_points << std::endl;
@@ -210,6 +210,7 @@ void SLAM::Initialize1Fr()
     curr_state=NOMINAL;
 }
 
+
 void SLAM::Initialize2Fr()
 {
     const double nn_match_ratio = 0.8f; // Nearest-neighbour matching ratio
@@ -218,7 +219,7 @@ void SLAM::Initialize2Fr()
     // 1. Select initial frame
     if (!p_init_fr)
     {
-        p_init_fr = new Frame(p_curr_fr);
+        p_init_fr = new Frame(p_curr_fr); // TODO delete of this frame when initialized
         // TODO use grid for point extraction
         orb_detector->detectAndCompute(p_init_fr->im_8u, cv::noArray(), v_kp_init, init_desc);
         return;
@@ -229,8 +230,6 @@ void SLAM::Initialize2Fr()
     Eigen::Matrix<float,4,4> T_01;
     // TODO use grid for point extraction
     orb_detector->detectAndCompute(p_curr_fr->im_8u, cv::noArray(), v_kp_curr, curr_desc);
-    std::cout << "init_desc.size() " << init_desc.size() << std::endl;
-    std::cout << "curr_desc.size() " << curr_desc.size() << std::endl;
     init_matches.clear();
     orb_matcher->knnMatch(init_desc, curr_desc, init_matches, 2);
 
@@ -249,7 +248,6 @@ void SLAM::Initialize2Fr()
             good_matches.push_back(init_matches[i][0]);
             v_matched_p_init.push_back(v_kp_init[init_matches[i][0].queryIdx].pt);
             v_matched_p_curr.push_back(v_kp_curr[init_matches[i][0].trainIdx].pt);
-            // std::cout << v_kp_init[init_matches[i][0].queryIdx].pt << "-" << v_kp_curr[init_matches[i][0].trainIdx].pt << std::endl;
         }
     }
 
@@ -257,34 +255,13 @@ void SLAM::Initialize2Fr()
     cv::Mat inlier_mask;
     cv::Mat K =  p_curr_fr->p_cam->GetKcv();
     cv::Mat fund_mat;
-    cv::findFundamentalMat(v_matched_p_init, v_matched_p_curr, CV_FM_RANSAC , 3, 0.99, inlier_mask).convertTo(fund_mat, CV_32F);
-    // std::cout << "fund_mat = " << fund_mat << std::endl;
-    cv::Mat ess_mat = K.t()*fund_mat*K;
-
-    cv::Mat A = cv::Mat::zeros(3,3,CV_32F);
-    A.at<float>(0,1) = -1.f;
-    A.at<float>(1,0) = 1.f;
-    A.at<float>(2,2) = 1.f;
-    cv::Mat B = cv::Mat::zeros(3,3,CV_32F);
-    B.at<float>(0,1) = 1.f;
-    B.at<float>(1,0) = -1.f;
-
-    cv::Mat t_init = cv::Mat::zeros(3,1,CV_32F);
+    cv::Mat t_init;
     cv::Mat R_init1, R_init2;
-    cv::Mat W, U, Vt;
-    cv::SVD cv_svd;
-    cv_svd.compute(ess_mat, W, U, Vt);
-    cv::Mat Tx = U*B*U.t();
-    t_init.at<float>(0) = Tx.at<float>(2,1);
-    t_init.at<float>(1) = Tx.at<float>(0,2);
-    t_init.at<float>(2) = Tx.at<float>(1,0);
-    R_init1 = U*A*Vt;
-    R_init2 = U*A.t()*Vt;
 
-    /*std::cout << "Tx = " << Tx << std::endl; // t_01
-    std::cout << "t_init = " << t_init << std::endl; // t_01
-    std::cout << "R_init1 = " << R_init1 << std::endl; // R_01
-    std::cout << "R_init2 = " << R_init2 << std::endl; // R_01*/
+    cv::findFundamentalMat(v_matched_p_init, v_matched_p_curr, CV_FM_RANSAC , 3, 0.99, inlier_mask).convertTo(fund_mat, CV_32F);
+    cv::Mat ess_mat = K.t()*fund_mat*K;
+    Maths::MotFromEss(ess_mat, R_init1, R_init2, t_init);
+
 
     /*cv::Mat img_matches;
     cv::drawMatches(p_init_fr->im_8u, v_kp_init, p_curr_fr->im_8u, v_kp_curr, good_matches, img_matches, cv::Scalar::all(-1),
@@ -301,12 +278,16 @@ void SLAM::Initialize2Fr()
     cv::Mat R_test(3,3,CV_32F);
     cv::Mat t_test(3,3,CV_32F);
     int good_pts[4];
+    std::vector<Eigen::Vector3f> v_3Dp, v_good_3Dp;
     int max_good=0;
     cv::Mat R_good;
     cv::Mat t_good;
+    cv::Mat mask_good;
     int idx_good;
     for(int count=0; count<4; count++)
     {
+        v_3Dp.clear();
+        v_3Dp.reserve(v_matched_p_init.size());
         good_pts[count] = 0;
         if (count == 0)
         {
@@ -330,9 +311,6 @@ void SLAM::Initialize2Fr()
         }
 
 
-        /*P2.rowRange(0,3).colRange(0,3) = R_test.clone();
-        P2.rowRange(0,3).colRange(3,4) = t_test.clone();*/
-
         R_test.copyTo(P2.rowRange(0,3).colRange(0,3));
         t_test.copyTo(P2.rowRange(0,3).col(3));
         P2 = K*P2;
@@ -343,22 +321,22 @@ void SLAM::Initialize2Fr()
         /*std::cout << "P1 = " << P1 << std::endl;
         std::cout << "P2 = " << P2 << std::endl;*/
 
-        // unsigned int i = 0;
-        std::vector<cv::Point2f>::iterator itPt2 = v_matched_p_curr.begin();
-
         for(unsigned int i=0; i < v_matched_p_init.size(); i++)
         {
             if(inlier_mask.at<uchar>(i))
             {
-                // Triangulate((*itPt1), (*itPt2), P1, P2, p3d1);
+                // Triangulate((*itPt1), (*itPt2), P1, P2, p3d1); TODO SVD is for all of them equal, computational save!!
                 Triangulate(v_matched_p_init[i], v_matched_p_curr[i], P1, P2, p3d1);
 
                 // Check positive depth in both frames and parallax
                 cv::Mat p3d2 = R_test*p3d1+t_test;
-                /*std::cout << "pt1 = " << v_matched_p_init[i] << std::endl << "pt2 = " << v_matched_p_curr[i] << std::endl;
-                std::cout << "p3d1 = " << p3d1.t() << std::endl << "p3d2 = " << p3d2.t() << std::endl;*/
+                /*std::cout << "pt1 = " << v_matched_p_init[i] << std::endl << "pt2 = " << v_matched_p_curr[i] << std::endl;*/
+                // std::cout << "     p3d1 = " << p3d1.t() << std::endl << "p3d2 = " << p3d2.t() << std::endl;
                 if ((p3d1.at<float>(2) > 0.f) && (p3d2.at<float>(2) > 0.f))
+                {
                     good_pts[count]++;
+                    v_3Dp.push_back(Maths::cvMat2EigVec3(p3d1));
+                }
             }
         }
 
@@ -369,6 +347,8 @@ void SLAM::Initialize2Fr()
             max_good=good_pts[count];
             R_good = R_test.clone();
             t_good = t_test.clone();
+            mask_good = inlier_mask.clone();
+            v_good_3Dp = v_3Dp;
         }
 
         std::cout << "good " << count << ": " << good_pts[count] << "/" << v_matched_p_init.size() << std::endl;
@@ -376,17 +356,32 @@ void SLAM::Initialize2Fr()
 
 
     // TODO 2.5 Check parallax
-    float parallax = 1.f; // dist/median_depth
-    // Compute parallax
-    if (parallax<0.05f)
+    float cosParallax = 1.f; // dist/median_depth
+    int good_parallax=0;
+    Eigen::Vector3f t_eig = Maths::cvMat2EigVec3(-R_good.t()*t_good);
+    std::cout << "t_eig: " << t_eig.transpose()  << std::endl;
+    for(std::vector<Eigen::Vector3f>::iterator it = v_good_3Dp.begin(); it != v_good_3Dp.end(); it++)
+    {
+        cosParallax = (*it).dot((*it)+t_eig)/((*it).norm()*((*it)+t_eig).norm());
+        std::cout << "    p3D: " << (*it).transpose() << "     cosParal = " << cosParallax << std::endl;
+
+        // if ((cosParallax<0.9998f)&&(cosParallax>-0.9998))
+        if ((cosParallax<0.9998)&&(cosParallax>-0.9998))
+            good_parallax++;
+    }
+
+    std::cout << "   Good points: " << good_parallax << std::endl;
+
+    if (good_parallax<0)
         return;
 
     // 3. Triangulate points of high gradient, and initialize them
     Eigen::Matrix<float,4,4> T10 = Eigen::Matrix4f::Identity();
-    T10.block<3,3>(0,0)=Maths::Cvmat2Eigmat(R_good);
-    T10.block<3,1>(0,3)=Maths::Cvmat2Eigmat(t_good);
+    T10.block<3,3>(0,0)=Maths::cvMat2Eigmat(R_good);
+    T10.block<3,1>(0,3)=Maths::cvMat2Eigmat(t_good);
     EpipolarTriangulate(p_init_fr, p_curr_fr, T10);
 }
+
 
 
 
@@ -468,12 +463,12 @@ void SLAM::ComputeEpipolarLine(const Eigen::Vector2f &_uv, const Eigen::Matrix<f
 
 void SLAM::EpipolarTriangulate(Frame* _p_fr_0, Frame* _p_fr_1, const Eigen::Matrix<float,4,4> &_T10)
 {
-    const float epi_step = 0.1f;
+    const float epi_step = 0.02f;
     Eigen::Matrix3f K_cam = _p_fr_0->p_cam->GetK();
     std::cout << "_T10 = " << _T10 << std::endl;
     std::cout << "K_cam = " << K_cam << std::endl;
 
-    float depth_0 = 30.f;
+    float depth_0 = 10.f;
     Eigen::Vector2f dir_epi;
     Eigen::Vector2f grad;
     std::vector<Eigen::Vector2f> v_scale_fact;
@@ -496,6 +491,21 @@ void SLAM::EpipolarTriangulate(Frame* _p_fr_0, Frame* _p_fr_1, const Eigen::Matr
     Eigen::Matrix<float,3,4> P2 = _T10.block<3,4>(0,0);
     P2 = K*P2;
     Eigen::Vector3f x3D;
+
+    cv::Mat im_points;
+    _p_fr_0->GetPyrLevel(0, im_points);
+    cv::cvtColor(im_points, im_points, CV_GRAY2RGB);
+    im_points.convertTo(im_points,CV_8UC3);
+    for (auto it = _p_fr_0->v_extr_points.rbegin(); it != _p_fr_0->v_extr_points.rend(); it++)
+    {
+        cv::Point2f p_draw;
+        p_draw.x = it->first(0);
+        p_draw.y = it->first(1);
+        cv::circle(im_points, p_draw, 2, cv::Scalar( 0, 0, 255 ), CV_FILLED, cv::LINE_8);
+    }
+
+    std::cout << "im_points.size() = " << im_points.size() << std::endl;
+
 
     for (auto it = _p_fr_0->v_extr_points.rbegin(); it != _p_fr_0->v_extr_points.rend(); it++)
     {
@@ -553,29 +563,45 @@ void SLAM::EpipolarTriangulate(Frame* _p_fr_0, Frame* _p_fr_1, const Eigen::Matr
                 cv::Mat Im0, Im1;
                 _p_fr_0->GetPyrLevel(lev, Im0);
                 _p_fr_1->GetPyrLevel(lev, Im1);
+                std::cout << "Im0.shape() = " << Im0.size() << std::endl;
+                std::cout << "Im1.shape() = " << Im1.size() << std::endl;
+                cv::cvtColor(Im0, Im0, CV_GRAY2RGB);
                 Im0.convertTo(Im0,CV_8UC3);
+                cv::cvtColor(Im1, Im1, CV_GRAY2RGB);
                 Im1.convertTo(Im1,CV_8UC3);
+                std::cout << "Im0.shape() = " << Im0.size() << std::endl;
+                std::cout << "Im1.shape() = " << Im1.size() << std::endl;
                 /*
                 cv::circle(Im0, Maths::EigV2f2cvPt2(uv_0),5.f, cv::Scalar( 0, 0, 255 ), CV_FILLED, cv::LINE_8);
                 cv::circle(Im1, Maths::EigV2f2cvPt2(uv_1),5.f, cv::Scalar( 0, 0, 255 ), CV_FILLED, cv::LINE_8);
                 cv::line(Im1, Maths::EigV2f2cvPt2(uv_1-100*dir_epi), Maths::EigV2f2cvPt2(uv_1+100*dir_epi), cv::Scalar( 0, 0, 255 ), 1, cv::LINE_8);
                 */
                 cv::Point2f p_0_cv, p_1_cv, epi_0, epi_1;
-                p_0_cv.x = uv_0(1);
-                p_0_cv.y = uv_0(0);
-                p_1_cv.x = uv_1(1);
-                p_1_cv.y = uv_1(0);
-                epi_0.x = uv_1(1)-1000*dir_epi(1);
-                epi_0.y = uv_1(0)-1000*dir_epi(0);
-                epi_1.x = uv_1(1)+1000*dir_epi(1);
-                epi_1.y = uv_1(0)+1000*dir_epi(0);
+                p_0_cv.x = uv_0(0);
+                p_0_cv.y = uv_0(1);
+                p_1_cv.x = uv_1(0);
+                p_1_cv.y = uv_1(1);
+                epi_0.x = uv_1(0)-1000*dir_epi(0);
+                epi_0.y = uv_1(1)-1000*dir_epi(1);
+                epi_1.x = uv_1(0)+1000*dir_epi(0);
+                epi_1.y = uv_1(1)+1000*dir_epi(1);
 
-                cv::circle(Im0, cv::Point2f(100,200),2, cv::Scalar( 0, 0, 255 ), CV_FILLED, cv::LINE_8);
                 cv::circle(Im0, p_0_cv,2, cv::Scalar( 0, 0, 255 ), CV_FILLED, cv::LINE_8);
-                cv::circle(Im1, p_1_cv,2, cv::Scalar( 0, 0, 255 ), CV_FILLED, cv::LINE_8);
+                cv::circle(Im1, p_1_cv,2, cv::Scalar( 0, 255, 255 ), CV_FILLED, cv::LINE_8);
                 cv::line(Im1, epi_0, epi_1, cv::Scalar( 0, 0, 255 ), 1, cv::LINE_8);
-                cv::Mat dst;
+                cv::Mat dst, dst2;
                 cv::hconcat(Im0, Im1, dst);
+                std::cout << "Im0.shape() = " << Im0.size() << std::endl;
+                std::cout << "Im1.shape() = " << Im1.size() << std::endl;
+                std::cout << "dst.shape() = " << dst.size() << std::endl;
+                std::cout << "im_points.shape() = " << im_points.size() << std::endl;
+
+                cv::hconcat(im_points, dst, dst);
+
+               /* cv::namedWindow("hola", CV_WINDOW_AUTOSIZE);
+                cv::imshow("hola", dst);
+                cv::waitKey();
+                std::cout << "im_points.size() = " << im_points.size() << std::endl;*/
                 p_displayer->Update(dst, p_curr_fr, l_all_points, l_all_KFs);
                 usleep(static_cast<__useconds_t>(3e6f));
 
